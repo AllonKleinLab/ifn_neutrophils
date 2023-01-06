@@ -31,6 +31,8 @@ from typing import Optional, Union
 ##  save_df_as_npz
 ##  bivariate_scatter
 ##  label_correspondence
+##  groupby_transform
+##  groupby_aggregate
 
 
 spring_cmap = matplotlib.colors.LinearSegmentedColormap.from_list('spring_cmap', 
@@ -1182,3 +1184,121 @@ def label_correspondence(anndata, label_column, loglikelihoods):
     labels_and_likelihoods = pd.concat((anndata.obs[label_column].reset_index(drop=True), likelihoods_normalized.T), axis=1)
     
     return labels_and_likelihoods.groupby(label_column).agg('mean').div(labels_and_likelihoods.groupby(label_column).agg('mean').sum(1), axis=0)
+
+def groupby_transform(anndata, groupby, f, var_names = None, rep=None, layer='X', return_df = False, use_raw = False, *args, **kwargs):
+    """
+    Execute functions on groups of observations in AnnData objects using the syntax from Pandas groupby transform.
+    
+    Parameters
+    ----------
+    
+    anndata : AnnData
+    
+    groupby : str, iterable
+    
+    f : function
+    
+    ... work in progress
+    """
+    
+    from scipy.sparse.csr import csr_matrix
+    
+    
+    if type(groupby) == str:
+        groupby = [groupby]
+    
+    if layer == 'X':
+        if use_raw:
+                anndata_X = anndata.raw.to_adata().to_df()
+        else:
+                anndata_X = anndata.to_df()
+                
+    
+    elif layer in anndata.layers.keys():
+        if var_names.__str__ != 'None':
+            anndata_X = anndata.to_df(layer)
+        else:
+            anndata_X = anndata.to_df(layer).loc[:, var_names]
+    
+    elif layer in anndata.obsm.keys():
+        if var_names.__str__ != 'None':
+            if isinstance(anndata.obsm[layer], csr_matrix):
+                anndata_X = pd.DataFrame(anndata.obsm[layer].todense(), var_names = var_names, index=anndata.obs_names)
+            else:
+                anndata_X = pd.DataFrame(anndata.obsm[layer], var_names = var_names, index=anndata.obs_names)
+                
+        else:
+            if isinstance(anndata.obsm[layer], csr_matrix):
+                anndata_X = pd.DataFrame(anndata.obsm[layer].todense(), index=anndata.obs_names)
+            else:
+                anndata_X = pd.DataFrame(anndata.obsm[layer], index=anndata.obs_names)
+    
+    
+    anndata_X = anndata_X.join(anndata.obs.loc[:,groupby]).rename_axis('cell_id').reset_index().set_index([*groupby, 'cell_id'])
+    
+    if return_df:
+        return anndata_X.groupby(groupby).transform(f, *args, **kwargs)
+    else:
+        return anndata_X.groupby(groupby).transform(f, *args, **kwargs).values
+    
+def groupby_aggregate(anndata, groupby, f, var_names = None, layer='X', return_df = False, use_raw = False, *args, **kwargs):
+    """
+    Execute functions on groups of observations in AnnData objects using the syntax from Pandas groupby aggregate.
+
+    Parameters
+    ----------
+
+    anndata : AnnData
+
+    groupby : str, iterable
+
+    f : function
+
+    ... work in progress
+    """
+
+    from scipy.sparse.csr import csr_matrix
+    
+    
+    if type(groupby) == str:
+        groupby = [groupby]
+    
+    if layer == 'X':
+        if use_raw:
+            if var_names.__str__ == 'None':
+                anndata_X = anndata.raw.to_adata().to_df()
+            else:
+                anndata_X = anndata.raw.to_adata().to_df().loc[:, var_names]
+        else:
+            if var_names.__str__ == 'None':
+                anndata_X = anndata.to_df()
+            else:
+                anndata_X = anndata.to_df().loc[:, var_names]
+                
+    
+    elif layer in anndata.layers.keys():
+        if var_names.__str__ == 'None':
+            anndata_X = anndata.to_df(layer)
+        else:
+            anndata_X = anndata.to_df(layer).loc[:, var_names]
+    
+    elif layer in anndata.obsm.keys():
+        if var_names.__str__ != 'None':
+            if isinstance(anndata.obsm[layer], csr_matrix):
+                anndata_X = pd.DataFrame(anndata.obsm[layer].todense(), var_names = var_names, index=anndata.obs_names)
+            else:
+                anndata_X = pd.DataFrame(anndata.obsm[layer], var_names = var_names, index=anndata.obs_names)
+                
+        else:
+            if isinstance(anndata.obsm[layer], csr_matrix):
+                anndata_X = pd.DataFrame(anndata.obsm[layer].todense(), index=anndata.obs_names)
+            else:
+                anndata_X = pd.DataFrame(anndata.obsm[layer], index=anndata.obs_names)
+
+
+    anndata_X = anndata_X.join(anndata.obs.loc[:,groupby]).rename_axis('cell_id').reset_index().set_index([*groupby, 'cell_id'])
+
+    if return_df:
+        return anndata_X.groupby(groupby).aggregate(f, *args, **kwargs)
+    else:
+        return  anndata_X.groupby(groupby).aggregate(f, *args, **kwargs).values
